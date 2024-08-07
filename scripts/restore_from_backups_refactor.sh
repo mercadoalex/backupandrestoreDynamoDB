@@ -31,37 +31,28 @@ check_table_exists() {
   aws dynamodb describe-table --region "$AWS_REGION" --table-name "$table_name" > /dev/null 2>&1
 }
 
-# Function to restore a table from a backup
-restore_table() {
-  local backup_arn=$1
-  local original_table_name=$2
+# Function to restore tables from backups
+restore_tables() {
+  local backup_suffix="-backup"
+  local table_names=$(aws dynamodb list-tables --region "$AWS_REGION" --query "TableNames[]" --output text)
 
-  # Check if the target table already exists to avoid conflicts
-  if check_table_exists "$original_table_name"; then
-    log "Table $original_table_name already exists. Skipping restore."
-    return
-  fi
+  for table_name in $table_names; do
+    if [[ $table_name == *$backup_suffix ]]; then
+      local original_table_name=${table_name%$backup_suffix}
+      log "Found backup: $table_name. Attempting to restore to $original_table_name."
 
-  # Announce restoration attempt
-  log "Initiating restore for $original_table_name from backup $backup_arn..."
-
-  # Attempt to restore the table from backup
-  if aws dynamodb restore-table-from-backup \
-    --target-table-name "$original_table_name" \
-    --backup-arn "$backup_arn" \
-    --region "$AWS_REGION"; then
-    log "Restore process initiated for table: $original_table_name. Waiting for $SLEEP_DURATION seconds before next operation..."
-    sleep $SLEEP_DURATION # Pause to help manage AWS API rate limits and service quotas
-  else
-    log "Failed to initiate restore for table: $original_table_name. Check AWS permissions and service limits."
-  fi
+      if check_table_exists "$original_table_name"; then
+        log "Table $original_table_name already exists. Skipping restore."
+      else
+        log "Restoring table $original_table_name from backup $table_name"
+        aws dynamodb restore-table-from-backup --region "$AWS_REGION" --target-table-name "$original_table_name" --backup-arn "$table_name"
+        log "Restored table $original_table_name from backup $table_name"
+      fi
+    fi
+  done
 }
 
-# List and parse all backups with names ending in -backup
-while IFS=$'\t' read -r backup_name backup_arn; do
-  original_table_name="${backup_name%-backup}" # Assumes backup name is original table name with '-backup' suffix
-  # Initiate table restore and notify user
-  restore_table "$backup_arn" "$original_table_name"
-done < <(aws dynamodb list-backups --region "$AWS_REGION" --query 'BackupSummaries[?ends_with(BackupName, `-backup`)].[BackupName,BackupArn]' --output text)
-
-log "The restoration process has finished for all tables."
+# Start the restoration process
+log "Starting the restoration process"
+restore_tables
+log "Restoration process completed"
