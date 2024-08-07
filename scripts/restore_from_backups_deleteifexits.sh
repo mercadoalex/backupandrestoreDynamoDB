@@ -60,5 +60,21 @@ export -f check_table_status
 export -f restore_table
 export AWS_REGION
 
+# Log function
+log() {
+  local message=$1
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - $message"
+}
+
+# Start the restoration process
+log "Starting the restoration process"
+
 # List all tables and filter those with the -backup suffix, then restore them in parallel
 aws dynamodb list-tables --region "$AWS_REGION" --query "TableNames[]" --output text | tr '\t' '\n' | grep '\-backup$' | xargs -n 1 -P 4 -I {} bash -c 'restore_table "$@"' _ {}
+
+# Check if the restoration process completed successfully
+if [ $? -eq 0 ]; then
+  log "Restoration process completed successfully"
+else
+  log "Restoration process failed"
+fi
