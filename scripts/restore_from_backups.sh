@@ -1,5 +1,5 @@
 #!/bin/bash
- 
+
 # Set AWS Region
 AWS_REGION='us-east-1' # Example: us-west-2
 SLEEP_DURATION=30 # In seconds, adjust this based on testing and AWS rate limits.
