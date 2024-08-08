@@ -1,9 +1,7 @@
 name: Backup and Restore Workflow
 
 on:
-  push:
-    branches:
-      - main
+
   workflow_dispatch:
     inputs:
       aws_region:
@@ -22,7 +20,7 @@ on:
 
 jobs:
   backup-restore:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-x64-16cores
 
     steps:
       - name: Check out repository
@@ -30,7 +28,13 @@ jobs:
 
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
-      
+
+      - name: Configure AWS credentials
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set default.region ${{ github.event.inputs.aws_region }}
+
       - name: Set AWS Region
         run: echo "AWS_REGION=${{ github.event.inputs.aws_region }}" >> $GITHUB_ENV  
 
