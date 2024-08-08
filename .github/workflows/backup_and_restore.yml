@@ -1,0 +1,50 @@
+name: Backup and Restore Workflow
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      aws_region:
+        description: 'Choose the AWS region'
+        required: true
+        default: 'us-east-1'
+        type: choice
+        options:
+          - us-east-1
+          - us-east-2
+          - us-west-2
+      continue_restore:
+        description: 'Do you want to continue with the restore process?'
+        required: true
+        default: 'no'
+
+jobs:
+  backup-restore:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v2
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+      
+      - name: Set AWS Region
+        run: echo "AWS_REGION=${{ github.event.inputs.aws_region }}" >> $GITHUB_ENV  
+
+      - id: backup_step
+        name: Run backup script
+        run: ./scripts/backup.sh
+
+      - name: Notify completion
+        run: echo "Backup step completed successfully."
+
+      - name: List backups
+        run: ./scripts/list_backups.sh
+        if: ${{ steps.backup_step.outcome == 'success' }}
+
+      - name: Restore process
+        if: ${{ github.event.inputs.continue_restore == 'yes' }}
+        run: ./scripts/restore_from_backups.sh

@@ -1,10 +1,8 @@
 #!/bin/bash
 
-# Set AWS profile if necessary
-# AWS_PROFILE=default
-
-# Set AWS Region
-AWS_REGION='us-east-1' # Example: us-west-2
+# Use the AWS_REGION environment variable from Github
+REGION=${AWS_REGION:-us-east-1}
+echo "Using AWS region: $REGION"
 
 # Retrieve and list all DynamoDB backups ending with -backup
-aws dynamodb list-backups --region $AWS_REGION --query 'BackupSummaries[?ends_with(BackupName, `-backup`)].[BackupName,TableArn,BackupArn]' --output table
+aws dynamodb list-backups --region $REGION --query 'BackupSummaries[?ends_with(BackupName, `-backup`)].[BackupName,TableArn,BackupArn]' --output table

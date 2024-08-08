@@ -1,45 +1,36 @@
 #!/bin/bash
+# Use the AWS_REGION environment variable from GitHub
+REGION=${AWS_REGION:-us-east-1}
+echo "Using AWS region: $REGION"
 
-# Set AWS Region
-AWS_REGION='us-east-1' # Example: us-west-2
-SLEEP_DURATION=30 # In seconds, adjust this based on testing and AWS rate limits.
- 
-# Function to check if the table already exists
-check_table_exists() {
-local table_name=$1
-aws dynamodb describe-table --region "$AWS_REGION" --table-name "$table_name" > /dev/null 2>&1
-}
- 
-# Function to restore a table from a backup
+# Function to restore a single DynamoDB table
 restore_table() {
-local backup_arn=$1
-local original_table_name=$2
- 
-# Check if the target table already exists to avoid conflicts
-if check_table_exists "$original_table_name"; then
-echo "Table $original_table_name already exists. Skipping restore."
-return
-fi
-# Announce restoration attempt
-echo "Initiating restore for $original_table_name from backup $backup_arn..."
-# Attempt to restore the table from backup
-if aws dynamodb restore-table-from-backup \
---target-table-name "$original_table_name" \
---backup-arn "$backup_arn" \
---region "$AWS_REGION"
-then
-echo "Restore process initiated for table: $original_table_name. Waiting for $SLEEP_DURATION seconds before next operation..."
-sleep $SLEEP_DURATION # Pause to help manage AWS API rate limits and service quotas
-else
-echo "Failed to initiate restore for table: $original_table_name. Check AWS permissions and service limits."
-fi
+  local backup_table=$1
+  local original_table=${backup_table%-backup}
+  
+  echo "Starting restore for table: $backup_table to $original_table"
+  
+  aws dynamodb restore-table-from-backup \
+    --region "$REGION" \
+    --target-table-name "$original_table" \
+    --backup-arn "arn:aws:dynamodb:REGION:ACCOUNT_ID:table/$backup_table/backup/BACKUP_ID"
+  
+  if [ $? -eq 0 ]; then
+    echo "Successfully restored $backup_table to $original_table"
+  else
+    echo "Failed to restore $backup_table"
+  fi
 }
- 
-# List and parse all backups with names ending in -backup
-while IFS=$'\t' read -r backup_name backup_arn; do
-original_table_name="${backup_name%-backup}" # Assumes backup name is original table name with '-backup' suffix
-# Initiate table restore and notify user
-restore_table "$backup_arn" "$original_table_name"
-# Subshell to execute aws list-backups command and filter the output
-done < <(aws dynamodb list-backups --region "$AWS_REGION" --query 'BackupSummaries[?ends_with(BackupName, `-backup`)].[BackupName,BackupArn]' --output text)
-echo "The restoration process has finished for all tables."
+
+# List all DynamoDB tables with the suffix '-backup'
+backup_tables=$(aws dynamodb list-tables --region "$REGION" | jq -r '.TableNames[]' | grep '-backup')
+
+# Restore each table in parallel
+for table in $backup_tables; do
+  restore_table "$table" &
+done
+
+# Wait for all background processes to complete
+wait
+
+echo "All restore operations completed."
